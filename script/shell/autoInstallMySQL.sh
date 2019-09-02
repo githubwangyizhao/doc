@@ -308,7 +308,7 @@ EOF
 cat > /tmp/mysql_sec_script <<EOF
 use mysql;
 delete from mysql.user where user!='root' or host!='localhost';
-grant all privileges on *.* to 'sys_admin'@'%' identified by '$newmysqlpwd';
+grant all privileges on *.* to 'root'@'%' identified by '$newmysqlpwd';
 flush privileges;
 EOF
 
