@@ -81,8 +81,9 @@ main(){
 	fi
 
 	if [ $? -eq 2 ]; then
+		# 添加软连
+		ln -s $install_path/$install_name/bin/erl /usr/local/bin/erl
 		print "安装成功！"
-		echo "可执行文件目录： $install_path/$install_name/bin" 
 	else
 		print "安装失败！"
 	fi

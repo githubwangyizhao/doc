@@ -6,70 +6,51 @@ sbin_dir=$install_dir/sbin
 data_dir=/data/ssdb 						## 数据及pid文件存放目录
 backup_dir=$install_dir/backup 	 			## 数据备份目录
 
-txt_begin="\033[32;49;1m [ "
-txt_end=" ] \033[39;49;0m"
-print(){
-	echo -e $txt_begin$1$txt_end
+print() {
+	echo -e "\033[32;49;1m [ $1 ] \033[39;49;0m"
 }
 
-evn_func() {
-	re=`ps aux | grep ssdb | awk '{print $11}' | grep ssdb`
-	if [ ! -z $re ]; then
-		echo $re
-		echo "正在运行SSDB服务！"
-		return 11
-	else
-		return 10
-	fi
-}
-
-install_func() {
-	# rm -rf $install_dir					## 切记：不删除旧安装目录
-	mkdir -p $base_dir						## 确保基础目录存在		
+installIfNotExist() {
+	mkdir -p $base_dir						## 确保基础目录存在
 	cd $base_dir
 
-	# 尝试进入ssdb目录，如果路径切换成功，直接认定ssdb已经安装，不再重新走下载安装流程
+	# 尝试进入ssdb目录，如果路径切换成功，直接认定ssdb已经安装，不再走安装流程
 	cd ssdb
-	stauts=$?
-	echo "是否已经安装ssdb：" `[ $stauts -eq 0 ] && echo "是" || echo "否" `
-	if [ $stauts -eq 0 ]; then 
+	if [ $? -eq 0 ]; then 
+		echo "$base_dir/ssdb目录已存在！"
 		return 12
 	fi
 
 	yum -y install autoconf					## 依赖工具安装
 	yum -y install gcc+ gcc-c++
 
-	print "准备下载。"
-	wget --no-check-certificate https://github.com/ideawu/ssdb/archive/master.zip
-	stauts=$?
-	echo "是否下载成功：" `[ $stauts -eq 0 ] && echo "是" || echo "否" `
-	if [ $stauts -eq 0 ]; then 
-	 	print "下载成功，准备安装。"
-		sleep 3 	
-		yum install -y unzip zip 			## 确保已经安装zip解压工具
-		unzip master.zip  					## 解压
-		mv ssdb-master ssdb 				## 重命名
-		rm -rf master.zip			   		## 删除文件
-		print "开始编译及安装。" 
+	### 不走网络下载，网络包可能会有问题
+	# print "准备下载。"	
+	# wget --no-check-certificate https://github.com/ideawu/ssdb/archive/master.zip
+
+	## 手动通过工具传包到服务器$base_dir/bak/目录下
+	if [ -f "$base_dir/bak/ssdb-master.zip" ];then
+		yum -y install unzip zip 						## 确保已经安装zip解压工具
+		unzip -n -d ./ $base_dir/bak/ssdb-master.zip	## 解压不覆盖
+		mv ssdb-master ssdb 							## 重命名
+		print "安装编译：" 
 		cd ssdb
 		make && make install
-	 	return 12
+		if [ $? -eq 0 ]; then 
+			return 12
+		else 
+			echo "安装编译失败！"
+			return 13
+		fi
 	else
-	 	print "下载失败。"
-	 	return 13
+		echo "$base_dir/bak/ssdb-master.zip文件不存在！"
+		return 13
 	fi
 }
 
-excute_func(){
-	# SSDB环境检测
-	# evn_func
-	# if [ $? -ne 10 ]; then
-	# 	print "安装终止"
-	# 	exit 1
-	# fi
-
+InstallAndRegConfig() {
 	# 下载并安装文件
-	install_func
+	installIfNotExist
 
 	if [ $? -eq 12 ]; then
 		print "设置SSDB端口："
@@ -105,7 +86,8 @@ excute_func(){
 		sed -i "s|port: 8888|port: ${ssdb_port}|g" $conf_file 						
 		sed -i "s|#auth: very-strong-password|auth: ${ssdb_passwd}|g" $conf_file 	
 		sed -i "s|output: log.txt|output: log_${ssdb_port}.txt|g" $conf_file 			
-		sed -i "s|cache_size: 500|cache_size: 2000|g" $conf_file 			
+		sed -i "s|cache_size: 500|cache_size: 2000|g" $conf_file
+		sed -i "s|level: debug|level: error|g" $conf_file
 		
 		# 注册命令
 		start_server=/bin/start_ssdb_${ssdb_port}
@@ -131,7 +113,7 @@ excute_func(){
 		echo "./ssdb-dump -h 127.0.0.1 -p ${ssdb_port} -a ${ssdb_passwd} -o ${backup_dir}/${ssdb_port}" >> $savedb
 		chmod 777 $savedb
 
-		print "安装完成！！！"
+		echo "安装完成！！！"
 		echo "-----------------------------"
 		echo "安装目录:" $install_dir
 		echo "启动服务命令：" start_ssdb_$ssdb_port
@@ -140,7 +122,7 @@ excute_func(){
 		echo "备份数据命令：" savedb_ssdb_$ssdb_port
 		echo "-----------------------------"
 	else
-		print "安装失败"
+		echo "安装失败"
 	fi
 }
 
@@ -153,7 +135,7 @@ main(){
 		exit 1
 	fi
 
-	excute_func
+	InstallAndRegConfig
 }
 
 main $1
